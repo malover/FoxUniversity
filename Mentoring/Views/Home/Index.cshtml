@@ -1,0 +1,94 @@
+﻿@model Mentoring.Models.CourseIndexData
+
+@{
+    ViewData["Title"] = "Home Page";
+}
+<h1>Home page</h1>
+<h2>Courses</h2>
+<table class="table">
+    <thead>
+        <tr>
+            <th>Course ID</th>
+            <th>Course Titile</th>
+            <th></th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var item in Model.Courses)
+        {
+            string selectedRow = "";
+            if (item.CourseID == (int?)ViewData["CourseID"])
+            {
+                selectedRow = "table - success";
+            }
+            <tr class="@selectedRow">
+                <td>
+                    @Html.DisplayFor(modelItem => item.CourseID)
+                </td>
+                <td>
+                    @Html.DisplayFor(modelItem => item.Title)
+                </td>
+                <td>
+                    <a asp-action="Index" asp-route-id="@item.CourseID">Select</a>
+                </td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+@if(Model.Groups != null)
+{
+    <h3>Groups related to the selected course</h3>
+    <table class ="table">
+        <tr>
+            <th>Group name</th>
+            <th>Number of Students</th>
+            <th></th>
+        </tr>
+
+        @foreach(var item in Model.Groups)
+        {
+            string selectedRow = "";
+            if (item.GroupID == (int?)ViewData["GroupID"])
+            {
+                selectedRow = "success";
+            }
+            <tr class ="@selectedRow">
+                <td>
+                    @item.GroupName
+                </td>
+                <td>
+                    @item.Students.Count();
+                </td>    
+                <td>
+                    @Html.ActionLink("Select", "Index", new {groupID = item.GroupID})
+                </td>
+            </tr>
+        }
+    </table>
+}
+
+@if(Model.Students != null)
+{
+    <h3>Students related to the selected group</h3>
+    <table class ="table">
+        <tr>
+            <th>Name</th>
+        </tr>
+
+        @foreach(var item in Model.Students)
+        {
+            string selectedRow = "";
+            if (item.GroupID == (int?)ViewData["GroupID"])
+            {
+                selectedRow = "success";
+            }
+            <tr class ="@selectedRow">
+                <td>
+                    @item.FullName
+                </td>                
+            </tr>
+        }
+    </table>
+}
+
