@@ -86,8 +86,7 @@ namespace Mentoring.Controllers
             if (student == null)
             {
                 return NotFound();
-            }
-            ViewData["GroupID"] = new SelectList(_context.Groups, "GroupID", "GroupName", student.GroupID);
+            }            
             return View(student);
         }
 
@@ -120,7 +119,7 @@ namespace Mentoring.Controllers
         }
 
         // GET: Students/Delete/5
-        public async Task<IActionResult> Delete(int? id, bool? saveChangesError = false)
+        public async Task<IActionResult> Delete(int? id)
         {
             if (id == null || _context.Students == null)
             {
@@ -135,7 +134,6 @@ namespace Mentoring.Controllers
             {
                 return NotFound();
             }
-
             return View(student);
         }
 
@@ -149,6 +147,7 @@ namespace Mentoring.Controllers
             {
                 return RedirectToAction(nameof(Index));
             }
+
             try
             {
                 _context.Students.Remove(student);

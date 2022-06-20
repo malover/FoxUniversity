@@ -55,17 +55,22 @@ namespace Mentoring.Controllers
         }
 
         // POST: Groups/Create
-        // To protect from overposting attacks, enable the specific properties you want to bind to.
-        // For more details, see http://go.microsoft.com/fwlink/?LinkId=317598.
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Create([Bind("GroupID,GroupName,CourseID")] Group @group)
+        public async Task<IActionResult> Create([Bind("GroupName,CourseID")] Group @group)
         {
-            if (ModelState.IsValid)
+            try
             {
-                _context.Add(@group);
-                await _context.SaveChangesAsync();
-                return RedirectToAction(nameof(Index));
+                if (ModelState.IsValid)
+                {
+                    _context.Add(@group);
+                    await _context.SaveChangesAsync();
+                    return RedirectToAction(nameof(Index));
+                }
+            }
+            catch (DbUpdateException)
+            {
+                ModelState.AddModelError("", "Unable to save changes. Try again.");
             }
             ViewData["CourseID"] = new SelectList(_context.Courses, "CourseID", "Title", @group.CourseID);
             return View(@group);
@@ -89,43 +94,35 @@ namespace Mentoring.Controllers
         }
 
         // POST: Groups/Edit/5
-        // To protect from overposting attacks, enable the specific properties you want to bind to.
-        // For more details, see http://go.microsoft.com/fwlink/?LinkId=317598.
-        [HttpPost]
+        [HttpPost, ActionName("Edit")]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Edit(int id, [Bind("GroupID,GroupName,CourseID")] Group @group)
+        public async Task<IActionResult> EditPost(int? id)
         {
-            if (id != @group.GroupID)
+            if (id == null)
             {
                 return NotFound();
             }
-
-            if (ModelState.IsValid)
+            var group = await _context.Groups.FirstOrDefaultAsync(g => g.GroupID == id);
+            if (await TryUpdateModelAsync<Group>(
+                group,
+                "",
+                g => g.GroupName))
             {
                 try
                 {
-                    _context.Update(@group);
                     await _context.SaveChangesAsync();
+                    return RedirectToAction(nameof(Index));
                 }
-                catch (DbUpdateConcurrencyException)
+                catch (DbUpdateException)
                 {
-                    if (!GroupExists(@group.GroupID))
-                    {
-                        return NotFound();
-                    }
-                    else
-                    {
-                        throw;
-                    }
+                    ModelState.AddModelError("", "Unable to save changes. Try again");
                 }
-                return RedirectToAction(nameof(Index));
             }
-            ViewData["CourseID"] = new SelectList(_context.Courses, "CourseID", "Title", @group.CourseID);
             return View(@group);
         }
 
         // GET: Groups/Delete/5
-        public async Task<IActionResult> Delete(int? id)
+        public async Task<IActionResult> Delete(int? id, bool? saveChangesError = false)
         {
             if (id == null || _context.Groups == null)
             {
@@ -133,13 +130,18 @@ namespace Mentoring.Controllers
             }
 
             var @group = await _context.Groups
+                .AsNoTracking()
                 .Include(g => g.Course)
                 .FirstOrDefaultAsync(m => m.GroupID == id);
             if (@group == null)
             {
                 return NotFound();
             }
-
+            if (saveChangesError.GetValueOrDefault())
+            {
+                ViewData["ErrorMessage"] =
+                    "Unable to delete group, because it's not empty";
+            }
             return View(@group);
         }
 
@@ -148,23 +150,35 @@ namespace Mentoring.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> DeleteConfirmed(int id)
         {
-            if (_context.Groups == null)
+            var group = await _context.Groups.FindAsync(id);
+            if (group == null)
             {
-                return Problem("Entity set 'SchoolContext.Groups'  is null.");
+                return RedirectToAction(nameof(Index));
             }
-            var @group = await _context.Groups.FindAsync(id);
-            if (@group != null)
+
+            try
             {
-                _context.Groups.Remove(@group);
+                if (group.Students.Count() != 0)
+                {
+                    throw new ArgumentException();
+                }
+                _context.Groups.Remove(group);
+                await _context.SaveChangesAsync();
+                return RedirectToAction(nameof(Index));
             }
-            
-            await _context.SaveChangesAsync();
-            return RedirectToAction(nameof(Index));
+            catch (ArgumentException)
+            {
+                return RedirectToAction(nameof(Delete), new { id = id, saveChangesError = true });
+            }
+            catch (DbUpdateException)
+            {
+                return RedirectToAction(nameof(Delete), new { id = id, saveChangesError = true });
+            }
         }
 
         private bool GroupExists(int id)
         {
-          return _context.Groups.Any(e => e.GroupID == id);
+            return _context.Groups.Any(e => e.GroupID == id);
         }
     }
 }
