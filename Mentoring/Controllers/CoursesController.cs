@@ -12,37 +12,29 @@ namespace Mentoring.Controllers
 {
     public class CoursesController : Controller
     {
-        private readonly SchoolContext _context;
 
-        public CoursesController(SchoolContext context)
-        {
-            _context = context;
-        }
-
+        UnitOfWork unitOfWork = new UnitOfWork();
         // GET: Courses
-        public async Task<IActionResult> Index()
+        public IActionResult Index()
         {
-              return _context.Courses != null ? 
-                          View(await _context.Courses.ToListAsync()) :
-                          Problem("Entity set 'SchoolContext.Course'  is null.");
+            var courses = unitOfWork.CourseRepository.Get();
+            return View(courses.ToList());
         }
 
         // GET: Courses/Details/5
-        public async Task<IActionResult> Details(int? id)
+        public IActionResult Details(int? id)
         {
-            if (id == null || _context.Courses == null)
+            if (id == null || unitOfWork.CourseRepository == null)
             {
                 return NotFound();
             }
 
-            var course = await _context.Courses
-                .Include(c => c.Groups)
-                .FirstOrDefaultAsync(m => m.CourseID == id);
+            var course = unitOfWork.CourseRepository.GetByID(id);
+
             if (course == null)
             {
                 return NotFound();
             }
-
             return View(course);
         }
 
@@ -55,26 +47,27 @@ namespace Mentoring.Controllers
         // POST: Courses/Create
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Create([Bind("CourseID,Title,Credits")] Course course)
+        public IActionResult Create([Bind("CourseID,Title,Credits")] Course course)
         {
             if (ModelState.IsValid)
             {
-                _context.Add(course);
-                await _context.SaveChangesAsync();
+                unitOfWork.CourseRepository.Insert(course);
+                unitOfWork.Save();
                 return RedirectToAction(nameof(Index));
             }
             return View(course);
         }
 
         // GET: Courses/Edit/5
-        public async Task<IActionResult> Edit(int? id)
+        public IActionResult Edit(int? id)
         {
-            if (id == null || _context.Courses == null)
+            if (id == null || unitOfWork.CourseRepository == null)
             {
                 return NotFound();
             }
 
-            var course = await _context.Courses.FindAsync(id);
+            var course = unitOfWork.CourseRepository.GetByID(id);
+
             if (course == null)
             {
                 return NotFound();
@@ -85,7 +78,7 @@ namespace Mentoring.Controllers
         // POST: Courses/Edit/5
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Edit(int id, [Bind("CourseID,Title,Credits")] Course course)
+        public IActionResult Edit(int id, [Bind("CourseID,Title,Credits")] Course course)
         {
             if (id != course.CourseID)
             {
@@ -96,8 +89,8 @@ namespace Mentoring.Controllers
             {
                 try
                 {
-                    _context.Update(course);
-                    await _context.SaveChangesAsync();
+                    unitOfWork.CourseRepository.Update(course);
+                    unitOfWork.Save();
                 }
                 catch (DbUpdateConcurrencyException)
                 {
@@ -116,15 +109,15 @@ namespace Mentoring.Controllers
         }
 
         // GET: Courses/Delete/5
-        public async Task<IActionResult> Delete(int? id)
+        public IActionResult Delete(int? id)
         {
-            if (id == null || _context.Courses == null)
+            if (id == null || unitOfWork.CourseRepository == null)
             {
                 return NotFound();
             }
 
-            var course = await _context.Courses
-                .FirstOrDefaultAsync(m => m.CourseID == id);
+            var course = unitOfWork.CourseRepository.GetByID(id);
+
             if (course == null)
             {
                 return NotFound();
@@ -136,25 +129,33 @@ namespace Mentoring.Controllers
         // POST: Courses/Delete/5
         [HttpPost, ActionName("Delete")]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> DeleteConfirmed(int id)
+        public IActionResult DeleteConfirmed(int id)
         {
-            if (_context.Courses == null)
+            if (unitOfWork.CourseRepository == null)
             {
-                return Problem("Entity set 'SchoolContext.Course'  is null.");
+                return NotFound();
             }
-            var course = await _context.Courses.FindAsync(id);
-            if (course != null)
+
+            var course = unitOfWork.CourseRepository.GetByID(id);
+            unitOfWork.CourseRepository.Delete(course);
+            unitOfWork.Save();
+
+            if (course == null)
             {
-                _context.Courses.Remove(course);
+                return NotFound();
             }
-            
-            await _context.SaveChangesAsync();
+
             return RedirectToAction(nameof(Index));
         }
 
         private bool CourseExists(int id)
         {
-          return (_context.Courses?.Any(e => e.CourseID == id)).GetValueOrDefault();
+            if (unitOfWork.CourseRepository.GetByID(id) == null)
+            {
+                return false;
+            }
+            else
+                return true;
         }
     }
 }

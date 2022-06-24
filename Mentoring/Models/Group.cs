@@ -5,6 +5,7 @@ namespace Mentoring.Models
 {
     public class Group
     {
+        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
         public int GroupID { get; set; }
 
         [Required]

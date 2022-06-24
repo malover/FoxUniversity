@@ -42,7 +42,6 @@
     <table class ="table">
         <tr>
             <th>Group name</th>
-            <th>Number of Students</th>
             <th></th>
         </tr>
 
@@ -56,10 +55,7 @@
             <tr class ="@selectedRow">
                 <td>
                     @item.GroupName
-                </td>
-                <td>
-                    @item.Students.Count();
-                </td>    
+                </td>   
                 <td>
                     @Html.ActionLink("Select", "Index", new {groupID = item.GroupID})
                 </td>

@@ -12,31 +12,24 @@ namespace Mentoring.Controllers
 {
     public class StudentsController : Controller
     {
-        private readonly SchoolContext _context;
-
-        public StudentsController(SchoolContext context)
-        {
-            _context = context;
-        }
+        UnitOfWork unitOfWork = new UnitOfWork();
 
         // GET: Students
-        public async Task<IActionResult> Index()
+        public IActionResult Index()
         {
-            var schoolContext = _context.Students.Include(s => s.Group);
-            return View(await schoolContext.ToListAsync());
+            var students = unitOfWork.StudentRepository.Get();
+            return View(students);
         }
 
         // GET: Students/Details/5
-        public async Task<IActionResult> Details(int? id)
+        public IActionResult Details(int? id)
         {
-            if (id == null || _context.Students == null)
+            if (id == null || unitOfWork.StudentRepository == null)
             {
                 return NotFound();
             }
 
-            var student = await _context.Students
-                .Include(s => s.Group)
-                .FirstOrDefaultAsync(m => m.ID == id);
+            var student = unitOfWork.StudentRepository.GetByID(id);
             if (student == null)
             {
                 return NotFound();
@@ -48,21 +41,21 @@ namespace Mentoring.Controllers
         // GET: Students/Create
         public IActionResult Create()
         {
-            ViewData["GroupID"] = new SelectList(_context.Groups, "GroupID", "GroupName");
+            PopulateGroupsDropDownList();
             return View();
         }
 
         // POST: Students/Create
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Create([Bind("LastName,FirstMidName,GroupID")] Student student)
+        public IActionResult Create([Bind("LastName,FirstMidName,GroupID")] Student student)
         {
             try
             {
                 if (ModelState.IsValid)
                 {
-                    _context.Add(student);
-                    await _context.SaveChangesAsync();
+                    unitOfWork.StudentRepository.Insert(student);
+                    unitOfWork.Save();
                     return RedirectToAction(nameof(Index));
                 }
             }
@@ -70,69 +63,76 @@ namespace Mentoring.Controllers
             {
                 ModelState.AddModelError("", "Unable to save changes. Try again.");
             }
-            ViewData["GroupID"] = new SelectList(_context.Groups, "GroupID", "GroupName", student.GroupID);
             return View(student);
         }
 
         // GET: Students/Edit/5
-        public async Task<IActionResult> Edit(int? id)
+        public IActionResult Edit(int? id)
         {
-            if (id == null || _context.Students == null)
+            if (id == null || unitOfWork.StudentRepository == null)
             {
                 return NotFound();
             }
 
-            var student = await _context.Students.FindAsync(id);
+            var student = unitOfWork.StudentRepository.GetByID(id);
             if (student == null)
             {
                 return NotFound();
-            }            
+            }
+            PopulateGroupsDropDownList();
             return View(student);
         }
 
         // POST: Students/Edit/5
-        [HttpPost, ActionName("Edit")]
+        [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> EditPost(int? id)
+        public IActionResult Edit(int id, [Bind("ID,LastName,FirstMidName,GroupID")] Student student)
         {
-            if (id == null)
+            if (id != student.ID)
             {
                 return NotFound();
             }
-            var student = await _context.Students.FirstOrDefaultAsync(s => s.ID == id);
-            if (await TryUpdateModelAsync<Student>(
-                student,
-                "",
-                s => s.FirstMidName, s => s.LastName))
+
+            if (ModelState.IsValid)
             {
                 try
                 {
-                    await _context.SaveChangesAsync();
-                    return RedirectToAction(nameof(Index));
+                    unitOfWork.StudentRepository.Update(student);
+                    unitOfWork.Save();
                 }
-                catch (DbUpdateException)
+                catch (DbUpdateConcurrencyException)
                 {
-                    ModelState.AddModelError("", "Unable to save changes. Try again");
+                    if (!StudentExists(student.ID))
+                    {
+                        return NotFound();
+                    }
+                    else
+                    {
+                        throw;
+                    }
                 }
+                return RedirectToAction(nameof(Index));
             }
             return View(student);
         }
 
         // GET: Students/Delete/5
-        public async Task<IActionResult> Delete(int? id)
+        public IActionResult Delete(int? id, bool? saveChangesError = false)
         {
-            if (id == null || _context.Students == null)
+            if (id == null || unitOfWork.StudentRepository == null)
             {
                 return NotFound();
             }
 
-            var student = await _context.Students
-                .Include(s => s.Group)
-                .AsNoTracking()
-                .FirstOrDefaultAsync(m => m.ID == id);
+            var student = unitOfWork.StudentRepository.GetByID(id);
             if (student == null)
             {
                 return NotFound();
+            }
+            if (saveChangesError.GetValueOrDefault())
+            {
+                ViewData["ErrorMessage"] =
+                    "Unable to delete group, because it's not empty";
             }
             return View(student);
         }
@@ -140,9 +140,9 @@ namespace Mentoring.Controllers
         // POST: Students/Delete/5
         [HttpPost, ActionName("Delete")]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> DeleteConfirmed(int id)
+        public IActionResult DeleteConfirmed(int id)
         {
-            var student = await _context.Students.FindAsync(id);
+            var student = unitOfWork.StudentRepository.GetByID(id);
             if (student == null)
             {
                 return RedirectToAction(nameof(Index));
@@ -150,11 +150,11 @@ namespace Mentoring.Controllers
 
             try
             {
-                _context.Students.Remove(student);
-                await _context.SaveChangesAsync();
+                unitOfWork.StudentRepository.Delete(student);
+                unitOfWork.Save();
                 return RedirectToAction(nameof(Index));
             }
-            catch(DbUpdateException)
+            catch (DbUpdateException)
             {
                 return RedirectToAction(nameof(Delete), new { id = id, saveChangesError = true });
             }
@@ -162,7 +162,20 @@ namespace Mentoring.Controllers
 
         private bool StudentExists(int id)
         {
-            return _context.Students.Any(e => e.ID == id);
+            if (unitOfWork.StudentRepository.GetByID(id) == null)
+            {
+                return false;
+            }
+            else
+                return true;
+        }
+
+        private void PopulateGroupsDropDownList(object selectedGroup = null)
+        {
+            var groupsQuery =  from g in unitOfWork.GroupRepository.Get().ToList()
+                               orderby g.GroupName
+                               select g;
+            ViewBag.GroupID = new SelectList(groupsQuery, "GroupID", "GroupName", selectedGroup);
         }
     }
 }

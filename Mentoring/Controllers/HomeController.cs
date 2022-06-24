@@ -8,16 +8,32 @@ namespace Mentoring.Controllers
 {
     public class HomeController : Controller
     {
-        private readonly SchoolContext _context;
+        UnitOfWork unitOfWork = new UnitOfWork();
 
-        public HomeController(SchoolContext context)
+        public IActionResult Index(int? id, int? groupID)
         {
-            _context = context;
-        }
 
-        public async Task<IActionResult> Index(int? id, int? groupID)
-        {
             var viewModel = new CourseIndexData();
+            viewModel.Courses = unitOfWork.CourseRepository.Get();
+            /*            viewModel.Groups = unitOfWork.GroupRepository.Get();
+                        viewModel.Students = unitOfWork.StudentRepository.Get();*/
+
+            if (id != null)
+            {
+                ViewData["CourseID"] = id.Value;
+                viewModel.Groups = unitOfWork.GroupRepository.Get().Where(
+                    g => g.CourseID == id);
+            }
+
+            if (groupID != null)
+            {
+                ViewData["GroupID"] = groupID.Value;
+                viewModel.Students = unitOfWork.StudentRepository.Get().Where(
+                    s => s.GroupID == groupID);
+            }
+
+            return View(viewModel);
+            /*var viewModel = new CourseIndexData();
             viewModel.Courses = await _context.Courses
                 .Include(c => c.Groups)
                 .ThenInclude(g => g.Students)
@@ -39,7 +55,7 @@ namespace Mentoring.Controllers
                     x => x.GroupID == groupID
                     ).Single().Students;
             }
-            return View(viewModel);
+            return View(viewModel);*/
         }
 
         public IActionResult Privacy()

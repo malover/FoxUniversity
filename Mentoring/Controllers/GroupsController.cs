@@ -12,59 +12,50 @@ namespace Mentoring.Controllers
 {
     public class GroupsController : Controller
     {
-        private readonly SchoolContext _context;
-
-        public GroupsController(SchoolContext context)
-        {
-            _context = context;
-        }
+        UnitOfWork unitOfWork = new UnitOfWork();
 
         // GET: Groups
-        public async Task<IActionResult> Index()
+        public ActionResult Index()
         {
-            var schoolContext = _context.Groups.Include(g => g.Course);
-            return View(await schoolContext.ToListAsync());
+            var groups = unitOfWork.GroupRepository.Get();
+            return View(groups.ToList());
         }
 
         // GET: Groups/Details/5
-        public async Task<IActionResult> Details(int? id)
+        public ActionResult Details(int? id)
         {
-            if (id == null || _context.Groups == null)
+            if (id == null || unitOfWork.GroupRepository == null)
             {
                 return NotFound();
             }
 
-            var @group = await _context.Groups
-                .Include(g => g.Students)
-                .Include(g => g.Course)
-                .AsNoTracking()
-                .FirstOrDefaultAsync(m => m.GroupID == id);
-            if (@group == null)
+            var group = unitOfWork.GroupRepository.GetByID(id);
+            if (group == null)
             {
                 return NotFound();
             }
 
-            return View(@group);
+            return View(group);
         }
 
         // GET: Groups/Create
-        public IActionResult Create()
+        public ActionResult Create()
         {
-            ViewData["CourseID"] = new SelectList(_context.Courses, "CourseID", "Title");
+            PopulateCoursesDropDownList();
             return View();
         }
 
         // POST: Groups/Create
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Create([Bind("GroupName,CourseID")] Group @group)
+        public ActionResult Create([Bind("GroupName,CourseID")] Group group)
         {
             try
             {
                 if (ModelState.IsValid)
                 {
-                    _context.Add(@group);
-                    await _context.SaveChangesAsync();
+                    unitOfWork.GroupRepository.Insert(group);
+                    unitOfWork.Save();
                     return RedirectToAction(nameof(Index));
                 }
             }
@@ -72,68 +63,71 @@ namespace Mentoring.Controllers
             {
                 ModelState.AddModelError("", "Unable to save changes. Try again.");
             }
-            ViewData["CourseID"] = new SelectList(_context.Courses, "CourseID", "Title", @group.CourseID);
-            return View(@group);
+            return View(group);
         }
 
         // GET: Groups/Edit/5
-        public async Task<IActionResult> Edit(int? id)
+        public ActionResult Edit(int? id)
         {
-            if (id == null || _context.Groups == null)
+            if (id == null || unitOfWork.CourseRepository == null)
             {
                 return NotFound();
             }
 
-            var @group = await _context.Groups.FindAsync(id);
-            if (@group == null)
+            var group = unitOfWork.GroupRepository.GetByID(id);
+
+            if (group == null)
             {
                 return NotFound();
             }
-            ViewData["CourseID"] = new SelectList(_context.Courses, "CourseID", "Title", @group.CourseID);
-            return View(@group);
+
+            PopulateCoursesDropDownList();
+            return View(group);
         }
 
         // POST: Groups/Edit/5
-        [HttpPost, ActionName("Edit")]
+        [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> EditPost(int? id)
+        public ActionResult Edit(int id, [Bind("GroupID,GroupName,CourseID")] Group group)
         {
-            if (id == null)
+            if (id != group.GroupID)
             {
                 return NotFound();
             }
-            var group = await _context.Groups.FirstOrDefaultAsync(g => g.GroupID == id);
-            if (await TryUpdateModelAsync<Group>(
-                group,
-                "",
-                g => g.GroupName))
+
+            if (ModelState.IsValid)
             {
                 try
                 {
-                    await _context.SaveChangesAsync();
-                    return RedirectToAction(nameof(Index));
+                    unitOfWork.GroupRepository.Update(group);
+                    unitOfWork.Save();
                 }
-                catch (DbUpdateException)
+                catch (DbUpdateConcurrencyException)
                 {
-                    ModelState.AddModelError("", "Unable to save changes. Try again");
+                    if (!GroupExists(group.GroupID))
+                    {
+                        return NotFound();
+                    }
+                    else
+                    {
+                        throw;
+                    }
                 }
+                return RedirectToAction(nameof(Index));
             }
-            return View(@group);
+            return View(group);
         }
 
         // GET: Groups/Delete/5
-        public async Task<IActionResult> Delete(int? id, bool? saveChangesError = false)
+        public ActionResult Delete(int? id, bool? saveChangesError = false)
         {
-            if (id == null || _context.Groups == null)
+            if (id == null || unitOfWork.GroupRepository == null)
             {
                 return NotFound();
             }
 
-            var @group = await _context.Groups
-                .AsNoTracking()
-                .Include(g => g.Course)
-                .FirstOrDefaultAsync(m => m.GroupID == id);
-            if (@group == null)
+            var group = unitOfWork.GroupRepository.GetByID(id);
+            if (group == null)
             {
                 return NotFound();
             }
@@ -142,28 +136,30 @@ namespace Mentoring.Controllers
                 ViewData["ErrorMessage"] =
                     "Unable to delete group, because it's not empty";
             }
-            return View(@group);
+            return View(group);
         }
 
         // POST: Groups/Delete/5
         [HttpPost, ActionName("Delete")]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> DeleteConfirmed(int id)
+        public ActionResult DeleteConfirmed(int id)
         {
-            var group = await _context.Groups.FindAsync(id);
+            var group = unitOfWork.GroupRepository.GetByID(id);
             if (group == null)
             {
                 return RedirectToAction(nameof(Index));
             }
-
             try
             {
-                if (group.Students.Count() != 0)
+                var studentInGroup = from s in unitOfWork.StudentRepository.Get()
+                                     where s.GroupID == id
+                                     select s;
+                if (studentInGroup.Any())
                 {
                     throw new ArgumentException();
                 }
-                _context.Groups.Remove(group);
-                await _context.SaveChangesAsync();
+                unitOfWork.GroupRepository.Delete(group);
+                unitOfWork.Save();
                 return RedirectToAction(nameof(Index));
             }
             catch (ArgumentException)
@@ -178,7 +174,22 @@ namespace Mentoring.Controllers
 
         private bool GroupExists(int id)
         {
-            return _context.Groups.Any(e => e.GroupID == id);
+            if (unitOfWork.CourseRepository.GetByID(id) == null)
+            {
+                return false;
+            }
+            else
+                return true;
         }
+
+        private void PopulateCoursesDropDownList(object selectedCourse = null)
+        {
+            var coursesQuery = from d in unitOfWork.CourseRepository.Get().ToList()
+                               orderby d.Title
+                               select d;
+            ViewBag.CourseID = new SelectList(coursesQuery, "CourseID", "Title", selectedCourse);
+        }
+
     }
 }
+
